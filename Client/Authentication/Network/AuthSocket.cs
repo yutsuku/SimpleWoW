@@ -352,7 +352,7 @@ namespace Client.Authentication.Network
         {
             try
             {
-                Game.UI.Log("Connecting to realmlist... ");
+                Game.UI.Log("Connecting to realmlist at " + this.Hostname + ":" + this.Port.ToString() + " ... ");
 
                 connection = new TcpClient(this.Hostname, this.Port);
                 output = new BinaryWriter(connection.GetStream());
