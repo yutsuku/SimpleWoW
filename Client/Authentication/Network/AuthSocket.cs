@@ -15,8 +15,7 @@ namespace Client.Authentication.Network
         public BigInteger Key { get; private set; }
         byte[] m2;
 
-        BinaryWriter output;
-        BinaryReader input;
+        NetworkStream stream;
 
         private string Username;
         private byte[] PasswordHash;
@@ -30,7 +29,7 @@ namespace Client.Authentication.Network
         {
             this.Game = program;
 
-            this.Username = username;
+            this.Username = username.ToUpper();
             this.Hostname = hostname;
             this.Port = port;
             
@@ -38,7 +37,7 @@ namespace Client.Authentication.Network
 
             PasswordHash = HashAlgorithm.SHA1.Hash(Encoding.ASCII.GetBytes(authstring.ToUpper()));
 
-            ReceiveData = new byte[1];
+            ReserveData(1);
         }
 
         ~AuthSocket()
@@ -56,8 +55,18 @@ namespace Client.Authentication.Network
                 IP = BitConverter.ToUInt32((connection.Client.LocalEndPoint as IPEndPoint).Address.GetAddressBytes(), 0)
             };
 
-            challenge.Send(output);
+            Send(challenge);
             ReadCommand();
+        }
+
+        void Send(ISendable sendable)
+        {
+            sendable.Send(stream);
+        }
+
+        void Send(byte[] buffer)
+        {
+            stream.Write(buffer, 0, buffer.Length);
         }
 
         #region Handlers
@@ -133,13 +142,15 @@ namespace Client.Authentication.Network
                     u = HashAlgorithm.SHA1.Hash(A.ToCleanByteArray(), B.ToCleanByteArray()).ToBigInteger();
 
                     // compute session key
-                    // TODO: session key computation fails for some reason
-                    //     all variables match exactly to the server side, but
-                    //     S is different
-                    S = (B - k * g.ModPow(x, N)).ModPow(a + u * x, N);
-
+                    S = ((B + k * (N - g.ModPow(x, N))) % N).ModPow(a + (u * x), N);
                     byte[] keyHash;
                     byte[] sData = S.ToCleanByteArray();
+                    if (sData.Length < 32)
+                    {
+                        var tmpBuffer = new byte[32];
+                        Buffer.BlockCopy(sData, 0, tmpBuffer, 32 - sData.Length, sData.Length);
+                        sData = tmpBuffer;
+                    }
                     byte[] keyData = new byte[40];
                     byte[] temp = new byte[16];
 
@@ -221,7 +232,7 @@ namespace Client.Authentication.Network
                     };
 
                     Game.UI.LogLine("Sending logon proof", LogLevel.Debug);
-                    proof.Send(output);
+                    Send(proof);
 
                     #endregion
 
@@ -284,8 +295,7 @@ namespace Client.Authentication.Network
             {
                 Game.UI.LogLine("Authentication succeeded!");
                 Game.UI.LogLine("Requesting realm list", LogLevel.Detail);
-                output.Write((byte)AuthCommand.REALM_LIST);
-                output.Write((uint)0);
+                Send(new byte[] { (byte)AuthCommand.REALM_LIST, 0x0, 0x0, 0x0, 0x0 });
             }
 
             // get next command
@@ -324,28 +334,51 @@ namespace Client.Authentication.Network
                     null                // state object
                 );
             }
-            catch
+            catch (Exception ex)
             {
+                Game.UI.LogException(ex.Message);
             }
         }
 
         protected void ReadCallback(IAsyncResult result)
         {
-            int size = this.connection.Client.EndReceive(result);
-
-            if (size == 0)
+            try
             {
-                Game.UI.LogLine("Server has disconnected.", LogLevel.Info);
-                Game.Exit();
+
+                int size = this.connection.Client.EndReceive(result);
+
+                if (size == 0)
+                {
+                    Game.UI.LogLine("Server has disconnected.", LogLevel.Info);
+                    Game.Exit();
+                }
+
+                AuthCommand command = (AuthCommand)ReceiveData[0];
+
+                CommandHandler handler;
+                if (Handlers.TryGetValue(command, out handler))
+                    handler();
+                else
+                    Game.UI.LogLine(string.Format("Unkown or unhandled command '{0}'", command), LogLevel.Debug);
             }
-
-            AuthCommand command = (AuthCommand)ReceiveData[0];
-
-            CommandHandler handler;
-            if (Handlers.TryGetValue(command, out handler))
-                handler();
-            else
-                Game.UI.LogLine(string.Format("Unkown or unhandled command '{0}'", command), LogLevel.Debug);
+            // these exceptions can happen as race condition on shutdown
+            catch (ObjectDisposedException ex)
+            {
+                Game.UI.LogException(ex.Message);
+            }
+            catch (NullReferenceException ex)
+            {
+                Game.UI.LogException(ex.Message);
+            }
+            catch (SocketException ex)
+            {
+                Game.UI.LogException(ex.Message);
+                //Game.Reconnect();
+            }
+            catch (EndOfStreamException)
+            {
+                //Game.Reconnect();
+            }
         }
 
         public override bool Connect()
@@ -355,8 +388,7 @@ namespace Client.Authentication.Network
                 Game.UI.Log("Connecting to realmlist at " + this.Hostname + ":" + this.Port.ToString() + " ... ");
 
                 connection = new TcpClient(this.Hostname, this.Port);
-                output = new BinaryWriter(connection.GetStream());
-                input = new BinaryReader(connection.GetStream());
+                stream = connection.GetStream();
 
                 Game.UI.LogLine("done!");
 

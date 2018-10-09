@@ -40,7 +40,7 @@ namespace Client.World.Network
             response.Write((uint)ourSeed);
             response.Write(zero);
             response.Write(zero);
-            response.Write(zero);
+            response.Write(ServerInfo.ID);
             response.Write((ulong)zero);
             response.Write(authResponse);
             response.Write(zero);            // length of addon data
@@ -50,7 +50,7 @@ namespace Client.World.Network
             // TODO: don't fully initialize here, auth may fail
             // instead, initialize in HandleServerAuthResponse when auth succeeds
             // will require special logic in network code to correctly decrypt/parse packet header
-            AuthenticationCrypto.Initialize(Game.Key.ToCleanByteArray());
+            authenticationCrypto.Initialize(Game.Key.ToCleanByteArray());
         }
 
         [PacketHandler(WorldCommand.ServerAuthResponse)]
@@ -63,9 +63,9 @@ namespace Client.World.Network
             uint billingTimeRested = packet.ReadUInt32();
             byte expansion = packet.ReadByte();
 
-            if (detail == CommandDetail.AuthSuccess)
+            if (detail == CommandDetail.AUTH_OK)
             {
-                OutPacket request = new OutPacket(WorldCommand.ClientEnumerateCharacters);
+                OutPacket request = new OutPacket(WorldCommand.CMSG_CHAR_ENUM);
                 Send(request);
             }
             else
@@ -75,7 +75,7 @@ namespace Client.World.Network
             }
         }
 
-        [PacketHandler(WorldCommand.ServerCharacterEnumeration)]
+        [PacketHandler(WorldCommand.SMSG_CHAR_ENUM)]
         void HandleCharEnum(InPacket packet)
         {
             byte count = packet.ReadByte();

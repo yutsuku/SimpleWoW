@@ -4,14 +4,14 @@ using HMACSHA1 = System.Security.Cryptography.HMACSHA1;
 
 namespace Client.World.Network
 {
-    enum AuthStatus
+    public enum AuthStatus
     {
         Uninitialized,
         Pending,
         Ready
     }
 
-    static class AuthenticationCrypto
+    public class AuthenticationCrypto
     {
         private static readonly byte[] encryptionKey = new byte[]
         {
@@ -24,49 +24,48 @@ namespace Client.World.Network
             0x12, 0xDD, 0xC0, 0x93, 0x42, 0x91, 0x53, 0x57
         };
 
-        static readonly HMACSHA1 outputHMAC = new HMACSHA1(encryptionKey);
-        static readonly HMACSHA1 inputHMAC = new HMACSHA1(decryptionKey);
+        ARC4 encryptionStream;
+        ARC4 decryptionStream;
 
-        static ARC4 encryptionStream;
-        static ARC4 decryptionStream;
-
-        public static AuthStatus Status
+        public AuthStatus Status
         {
             get;
             private set;
         }
 
-        static AuthenticationCrypto()
+        public AuthenticationCrypto()
         {
             Status = AuthStatus.Uninitialized;
         }
 
         [Obsolete("NYI", true)]
-        public static void Pending()
+        public void Pending()
         {
             Status = AuthStatus.Pending;
         }
 
-        public static void Initialize(byte[] sessionKey)
+        public void Initialize(byte[] sessionKey)
         {
             // create RC4-drop[1024] stream
-            encryptionStream = new ARC4(outputHMAC.ComputeHash(sessionKey));
+            using (HMACSHA1 outputHMAC = new HMACSHA1(encryptionKey))
+                encryptionStream = new ARC4(outputHMAC.ComputeHash(sessionKey));
             encryptionStream.Process(new byte[1024], 0, 1024);
 
             // create RC4-drop[1024] stream
-            decryptionStream = new ARC4(inputHMAC.ComputeHash(sessionKey));
+            using (HMACSHA1 inputHMAC = new HMACSHA1(decryptionKey))
+                decryptionStream = new ARC4(inputHMAC.ComputeHash(sessionKey));
             decryptionStream.Process(new byte[1024], 0, 1024);
 
             Status = AuthStatus.Ready;
         }
 
-        public static void Decrypt(byte[] data, int start, int count)
+        public void Decrypt(byte[] data, int start, int count)
         {
             if (Status == AuthStatus.Ready)
                 decryptionStream.Process(data, start, count);
         }
 
-        public static void Encrypt(byte[] data, int start, int count)
+        public void Encrypt(byte[] data, int start, int count)
         {
             if (Status == AuthStatus.Ready)
                 encryptionStream.Process(data, start, count);

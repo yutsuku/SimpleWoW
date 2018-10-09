@@ -24,7 +24,7 @@ namespace Client.World
         uint PetInfoId;
         uint PetLevel;
         uint PetFamilyId;
-        Item[] Items = new Item[20];
+        Item[] Items = new Item[19];
 
         public Character(InPacket packet)
         {

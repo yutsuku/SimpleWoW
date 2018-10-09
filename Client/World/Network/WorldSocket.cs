@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Net.Sockets;
 using System.Reflection;
 using System.Threading;
@@ -21,12 +22,12 @@ namespace Client.World.Network
         private long received;
         public long Received { get { return received; } }
 
+        BatchQueue<InPacket> packetsQueue = new BatchQueue<InPacket>();
+
         public WorldSocket(IGame program, WorldServerInfo serverInfo)
         {
             Game = program;
             ServerInfo = serverInfo;
-
-            SendLock = new object();
         }
 
         #region Handler registration
@@ -68,8 +69,19 @@ namespace Client.World.Network
 
         int Index;
         int Remaining;
-        
-        private void BeginRead(AsyncCallback callback, object state = null)
+
+        private void ReadAsync(EventHandler<SocketAsyncEventArgs> callback, object state = null)
+        {
+            if (Disposing)
+                return;
+
+            SocketAsyncState = state;
+            SocketArgs.SetBuffer(ReceiveData, Index, Remaining);
+            SocketCallback = callback;
+            connection.Client.ReceiveAsync(SocketArgs);
+        }
+
+        /*private void BeginRead(AsyncCallback callback, object state = null)
         {
             this.connection.Client.BeginReceive
             (
@@ -78,161 +90,226 @@ namespace Client.World.Network
                 callback,
                 state
             );
-        }
+        }*/
 
         /// <summary>
         /// Determines how large the incoming header will be by
         /// inspecting the first byte, then initiates reading the header.
         /// </summary>
-        private void ReadSizeCallback(IAsyncResult result)
+        private void ReadSizeCallback(object sender, SocketAsyncEventArgs e)
         {
-            int bytesRead = this.connection.Client.EndReceive(result);
-            if (bytesRead == 0 && result.IsCompleted)
+            try
             {
-                // TODO: world server disconnect
-                Game.UI.LogLine("Server has closed the connection");
-                Game.Exit();
-                return;
+                int bytesRead = e.BytesTransferred;
+                if (bytesRead == 0)
+                {
+                    // TODO: world server disconnect
+                    Game.UI.LogLine("Server has closed the connection");
+                    //Game.Reconnect();
+                    return;
+                }
+
+                Interlocked.Increment(ref transferred);
+                Interlocked.Increment(ref received);
+
+                authenticationCrypto.Decrypt(ReceiveData, 0, 1);
+                if ((ReceiveData[0] & 0x80) != 0)
+                {
+                    // need to resize the buffer
+                    byte temp = ReceiveData[0];
+                    ReserveData(5);
+                    ReceiveData[0] = (byte)((0x7f & temp));
+
+                    Remaining = 4;
+                }
+                else
+                    Remaining = 3;
+
+                Index = 1;
+                ReadAsync(ReadHeaderCallback);
             }
-
-            Interlocked.Increment(ref transferred);
-            Interlocked.Increment(ref received);
-
-            AuthenticationCrypto.Decrypt(ReceiveData, 0, 1);
-            if ((ReceiveData[0] & 0x80) != 0)
+            // these exceptions can happen as race condition on shutdown
+            catch (ObjectDisposedException ex)
             {
-                // need to resize the buffer
-                byte temp = ReceiveData[0];
-                ReceiveData = new byte[5];
-                ReceiveData[0] = (byte)((0x7f & temp));
-
-                Remaining = 4;
+                Game.UI.LogException(ex.Message);
             }
-            else
-                Remaining = 3;
-
-            Index = 1;
-            BeginRead(new AsyncCallback(ReadHeaderCallback));
+            catch (NullReferenceException ex)
+            {
+                Game.UI.LogException(ex.Message);
+            }
+            catch (InvalidOperationException ex)
+            {
+                Game.UI.LogException(ex.Message);
+            }
+            catch (SocketException ex)
+            {
+                Game.UI.LogException(ex.Message);
+                //Game.Reconnect();
+            }
         }
 
         /// <summary>
         /// Reads the rest of the incoming header.
         /// </summary>
-        private void ReadHeaderCallback(IAsyncResult result)
+        private void ReadHeaderCallback(object sender, SocketAsyncEventArgs e)
         {
-            //if (ReceiveData.Length != 4 && ReceiveData.Length != 5)
-              //  throw new Exception("ReceiveData.Length not in order");
-
-            int bytesRead = this.connection.Client.EndReceive(result);
-            if (bytesRead == 0 && result.IsCompleted)
+            try
             {
-                // TODO: world server disconnect
-                Game.UI.LogLine("Server has closed the connection");
-                Game.Exit();
-                return;
-            }
-
-            Interlocked.Add(ref transferred, bytesRead);
-            Interlocked.Add(ref received, bytesRead);
-
-            if (bytesRead == Remaining)
-            {
-                // finished reading header
-                // the first byte was decrypted already, so skip it
-                AuthenticationCrypto.Decrypt(ReceiveData, 1, ReceiveData.Length - 1);
-                ServerHeader header = new ServerHeader(ReceiveData);
-
-                Game.UI.LogLine(header.ToString(), LogLevel.Debug);
-                if (header.InputDataLength > 5 || header.InputDataLength < 4)
-                    Game.UI.LogException(String.Format("Header.InputataLength invalid: {0}", header.InputDataLength));
-
-                if (header.Size > 0)
+                int bytesRead = e.BytesTransferred;
+                if (bytesRead == 0)
                 {
-                    // read the packet payload
-                    Index = 0;
-                    Remaining = header.Size;
-                    ReceiveData = new byte[header.Size];
-                    BeginRead(new AsyncCallback(ReadPayloadCallback), header);
+                    // TODO: world server disconnect
+                    Game.UI.LogLine("Server has closed the connection");
+                    //Game.Reconnect();
+                    return;
+                }
+
+                Interlocked.Add(ref transferred, bytesRead);
+                Interlocked.Add(ref received, bytesRead);
+
+                if (bytesRead == Remaining)
+                {
+                    // finished reading header
+                    // the first byte was decrypted already, so skip it
+                    authenticationCrypto.Decrypt(ReceiveData, 1, ReceiveDataLength - 1);
+                    ServerHeader header = new ServerHeader(ReceiveData, ReceiveDataLength);
+
+                    Game.UI.LogLine(header.ToString(), LogLevel.Debug);
+                    if (header.InputDataLength > 5 || header.InputDataLength < 4)
+                        Game.UI.LogException(String.Format("Header.InputDataLength invalid: {0}", header.InputDataLength));
+
+                    if (header.Size > 0)
+                    {
+                        // read the packet payload
+                        Index = 0;
+                        Remaining = header.Size;
+                        ReserveData(header.Size);
+                        ReadAsync(ReadPayloadCallback, header);
+                    }
+                    else
+                    {
+                        // the packet is just a header, start next packet
+                        QueuePacket(new InPacket(header));
+                        Start();
+                    }
                 }
                 else
                 {
-                    // the packet is just a header, start next packet
-                    HandlePacket(new InPacket(header));
-                    Start();
+                    // more header to read
+                    Index += bytesRead;
+                    Remaining -= bytesRead;
+                    ReadAsync(ReadHeaderCallback);
                 }
             }
-            else
+            // these exceptions can happen as race condition on shutdown
+            catch (ObjectDisposedException ex)
             {
-                // more header to read
-                Index += bytesRead;
-                Remaining -= bytesRead;
-                BeginRead(new AsyncCallback(ReadHeaderCallback));
+                Game.UI.LogException(ex.Message);
+            }
+            catch (NullReferenceException ex)
+            {
+                Game.UI.LogException(ex.Message);
+            }
+            catch (SocketException ex)
+            {
+                Game.UI.LogException(ex.Message);
             }
         }
 
         /// <summary>
         /// Reads the payload data.
         /// </summary>
-        private void ReadPayloadCallback(IAsyncResult result)
+        private void ReadPayloadCallback(object sender, SocketAsyncEventArgs e)
         {
-            int bytesRead = this.connection.Client.EndReceive(result);
-            if (bytesRead == 0 && result.IsCompleted)
+            try
             {
-                // TODO: world server disconnect
-                Game.UI.LogLine("Server has closed the connection");
-                Game.Exit();
+                int bytesRead = e.BytesTransferred;
+                if (bytesRead == 0)
+                {
+                    // TODO: world server disconnect
+                    Game.UI.LogLine("Server has closed the connection");
+                    //Game.Reconnect();
+                    return;
+                }
+
+                Interlocked.Add(ref transferred, bytesRead);
+                Interlocked.Add(ref received, bytesRead);
+
+                if (bytesRead == Remaining)
+                {
+                    // get header and packet, handle it
+                    ServerHeader header = (ServerHeader)SocketAsyncState;
+                    QueuePacket(new InPacket(header, ReceiveData, ReceiveDataLength));
+
+                    // start new asynchronous read
+                    Start();
+                }
+                else
+                {
+                    // more payload to read
+                    Index += bytesRead;
+                    Remaining -= bytesRead;
+                    ReadAsync(ReadPayloadCallback, SocketAsyncState);
+                }
+            }
+            catch (NullReferenceException ex)
+            {
+                Game.UI.LogException(ex.Message);
+            }
+            catch (SocketException ex)
+            {
+                Game.UI.LogException(ex.Message);
+                //Game.Reconnect();
                 return;
-            }
-
-            Interlocked.Add(ref transferred, bytesRead);
-            Interlocked.Add(ref received, bytesRead);
-
-            if (bytesRead == Remaining)
-            {
-                // get header and packet, handle it
-                ServerHeader header = (ServerHeader)result.AsyncState;
-                InPacket packet = new InPacket(header, ReceiveData);
-                HandlePacket(packet);
-
-                // start new asynchronous read
-                Start();
-            }
-            else
-            {
-                // more payload to read
-                Index += bytesRead;
-                Remaining -= bytesRead;
-                BeginRead(new AsyncCallback(ReadPayloadCallback), result.AsyncState);
             }
         }
 
         #endregion
 
+        public void HandlePackets()
+        {
+            foreach (var packet in packetsQueue.BatchDequeue())
+                HandlePacket(packet);
+        }
+
         private void HandlePacket(InPacket packet)
         {
-            PacketHandler handler;
-            if (PacketHandlers.TryGetValue((WorldCommand)packet.Header.Command, out handler))
+            try
             {
-                Game.UI.LogLine(string.Format("Received {0}", packet.Header.Command), LogLevel.Debug);
-
-                if (AuthenticationCrypto.Status == AuthStatus.Ready)
-                    // AuthenticationCrypto is ready, handle the packet asynchronously
-                    handler.BeginInvoke(packet, result => handler.EndInvoke(result), null);
-                else
+                PacketHandler handler;
+                if (PacketHandlers.TryGetValue(packet.Header.Command, out handler))
+                {
+                    Game.UI.LogLine(string.Format("Received {0}", packet.Header.Command), LogLevel.Debug);
                     handler(packet);
+                }
+                else
+                {
+                    Game.UI.LogLine(string.Format("Unknown or unhandled command '{0}'", packet.Header.Command), LogLevel.Debug);
+                }
             }
-            else
-                Game.UI.LogLine(string.Format("Unknown or unhandled command '{0}'", packet.Header.Command), LogLevel.Debug);
+            catch (Exception ex)
+            {
+                Game.UI.LogException(ex.Message);
+            }
+            finally
+            {
+                packet.Dispose();
+            }
+        }
+
+        private void QueuePacket(InPacket packet)
+        {
+            packetsQueue.Enqueue(packet);
         }
 
         #region GameSocket Members
 
         public override void Start()
         {
-            ReceiveData = new byte[4];
+            ReserveData(4, true);
             Index = 0;
             Remaining = 1;
-            BeginRead(new AsyncCallback(ReadSizeCallback));
+            ReadAsync(ReadSizeCallback);
         }
 
         public override bool Connect()
@@ -241,6 +318,8 @@ namespace Client.World.Network
             {
                 Game.UI.Log(string.Format("Connecting to realm {0}... ", ServerInfo.Name));
 
+                if (connection != null)
+                    connection.Close();
                 connection = new TcpClient(ServerInfo.Address, ServerInfo.Port);
 
                 Game.UI.LogLine("done!");
@@ -256,15 +335,22 @@ namespace Client.World.Network
 
         #endregion
 
-        object SendLock;
-
         public void Send(OutPacket packet)
         {
-            byte[] data = packet.Finalize();
+            byte[] data = packet.Finalize(authenticationCrypto);
 
-            // TODO: switch to asynchronous send
-            lock (SendLock)
-                connection.Client.Send(data);
+            try
+            {
+                connection.Client.Send(data, 0, data.Length, SocketFlags.None);
+            }
+            catch (ObjectDisposedException ex)
+            {
+                Game.UI.LogException(ex.Message);
+            }
+            catch (EndOfStreamException ex)
+            {
+                Game.UI.LogException(ex.Message);
+            }
 
             Interlocked.Add(ref transferred, data.Length);
             Interlocked.Add(ref sent, data.Length);

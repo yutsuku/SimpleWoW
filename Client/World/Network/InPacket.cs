@@ -1,4 +1,6 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
+using System.IO.Compression;
 
 namespace Client.World.Network
 {
@@ -6,14 +8,14 @@ namespace Client.World.Network
     {
         public Header Header { get; private set; }
 
-        internal InPacket(ServerHeader header)
-            : this(header, new byte[] { })
+        internal InPacket(Header header)
+            : this(header, new byte[] { }, 0)
         {
 
         }
 
-        internal InPacket(ServerHeader header, byte[] buffer)
-            : base(new MemoryStream(buffer))
+        internal InPacket(Header header, byte[] buffer, int bufferLength)
+            : base(new MemoryStream(buffer, 0, bufferLength, false, false))
         {
             Header = header;
         }
@@ -37,6 +39,37 @@ namespace Client.World.Network
             }
 
             return res;
+        }
+
+        public DateTime ReadPackedTime()
+        {
+            var packedDate = ReadInt32();
+            var minute = packedDate & 0x3F;
+            var hour = (packedDate >> 6) & 0x1F;
+            // var weekDay = (packedDate >> 11) & 7;
+            var day = (packedDate >> 14) & 0x3F;
+            var month = (packedDate >> 20) & 0xF;
+            var year = (packedDate >> 24) & 0x1F;
+            // var something2 = (packedDate >> 29) & 3; always 0
+
+            return new DateTime(2000, 1, 1).AddYears(year).AddMonths(month).AddDays(day).AddHours(hour).AddMinutes(minute);
+        }
+
+        public InPacket Inflate()
+        {
+            uint uncompressedSize = ReadUInt32();
+            //Skip first 2 bytes used by zlib only
+            ReadBytes(2);
+
+            using (DeflateStream decompressedStream = new DeflateStream(BaseStream, CompressionMode.Decompress))
+            {
+                using (MemoryStream memoryStream = new MemoryStream())
+                {
+                    decompressedStream.CopyTo(memoryStream);
+                    memoryStream.Position = 0;
+                    return new InPacket(Header, memoryStream.GetBuffer(), (int)memoryStream.Length);
+                }
+            }
         }
     }
 }

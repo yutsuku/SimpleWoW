@@ -17,8 +17,7 @@ namespace Client.Authentication
         private byte version_minor;
         private byte version_bugfix;
         private ushort build;
-        private byte unk1;
-        private ushort unk2;
+        public uint ID { get; private set; }
 
         public WorldServerInfo(BinaryReader reader)
         {
@@ -33,7 +32,7 @@ namespace Client.Authentication
             Population = reader.ReadSingle();
             load = reader.ReadByte();
             timezone = reader.ReadByte();
-            unk1 = reader.ReadByte();
+            ID = reader.ReadByte();
 
             if ((Flags & 4) != 0)
             {
