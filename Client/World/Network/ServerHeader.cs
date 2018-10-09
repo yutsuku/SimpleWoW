@@ -11,6 +11,26 @@ namespace Client.World.Network
         public int Size { get; private set; }
         public int InputDataLength { get; private set; }
 
+        internal ServerHeader(byte[] data)
+        {
+            InputDataLength = data.Length;
+            if (InputDataLength == 4)
+            {
+                Size = (int)(((uint)data[0]) << 8 | data[1]);
+                Command = (WorldCommand)BitConverter.ToUInt16(data, 2);
+            }
+            else if (InputDataLength == 5)
+            {
+                Size = (int)(((((uint)data[0]) & 0x7F) << 16) | (((uint)data[1]) << 8) | data[2]);
+                Command = (WorldCommand)BitConverter.ToUInt16(data, 3);
+            }
+            else
+                return;
+
+            // decrement since we already have command's two bytes
+            Size -= 2;
+        }
+
         internal ServerHeader(byte[] data, int dataLength)
         {
             InputDataLength = dataLength;

@@ -50,7 +50,7 @@ namespace Client
                 return _receiveData;
             }
         }
-        private byte[] _receiveData;
+        public byte[] _receiveData;
         protected int ReceiveDataLength;
         protected void ReserveData(int size, bool reset = false)
         {

@@ -14,6 +14,12 @@ namespace Client.World.Network
 
         }
 
+        internal InPacket(ServerHeader header, byte[] buffer)
+            : base(new MemoryStream(buffer))
+        {
+            Header = header;
+        }
+
         internal InPacket(Header header, byte[] buffer, int bufferLength)
             : base(new MemoryStream(buffer, 0, bufferLength, false, false))
         {

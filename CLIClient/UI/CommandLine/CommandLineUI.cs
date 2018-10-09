@@ -7,6 +7,7 @@ using Client.Authentication;
 using Client.Chat;
 using Client.Chat.Definitions;
 using Client.World;
+using Client.World.Definitions;
 using Client.World.Network;
 
 namespace Client.UI.CommandLine
@@ -16,6 +17,9 @@ namespace Client.UI.CommandLine
         #region Private Members
         private LogLevel _logLevel;
         private StreamWriter _logFile;
+        private string _chatHeader; // keeps info on the last written chat (so that we don't have to write /say twice, it 'sticks')
+        private string _chatTarget; // used for /whisper <target>, keeps the <target>
+        private DateTime _lastKeepAliveTime;
 
         #endregion
 
@@ -46,6 +50,120 @@ namespace Client.UI.CommandLine
             KeyBind handler;
             if (_keyPressHandlers.TryGetValue(keyPress.Key, out handler))
                 handler();
+        }
+
+        public void UpdateCommands()
+        {
+            if (Game.World.SelectedCharacter == null)
+                return;
+
+            string s = Console.ReadLine();
+            if (String.IsNullOrEmpty(s))
+                return;
+
+            string message = s;
+            if (s.StartsWith("/")) // client command
+            {
+                int idx = s.IndexOf(" "); // first space, get the end of the '/' command
+                if (idx != -1)
+                {
+                    _chatHeader = s.Substring(0, idx);
+                    message = s.Substring(idx + 1); // after the space
+                }
+            }
+
+            if (_chatHeader.StartsWith("/s")) // "/say"
+            {
+                var response = new OutPacket(WorldCommand.CMSG_MESSAGECHAT);
+
+                response.Write((uint)ChatMessageType.Say);
+                var race = Game.World.SelectedCharacter.Race;
+                var language = race.IsHorde() ? Language.Orcish : Language.Common;
+                response.Write((uint)language);
+                response.Write(message.ToCString());
+                Game.SendPacket(response);
+            }
+            else if (_chatHeader.StartsWith("/y")) // "/yell"
+            {
+                var response = new OutPacket(WorldCommand.CMSG_MESSAGECHAT);
+
+                response.Write((uint)ChatMessageType.Yell);
+                var race = Game.World.SelectedCharacter.Race;
+                var language = race.IsHorde() ? Language.Orcish : Language.Common;
+                response.Write((uint)language);
+                response.Write(message.ToCString());
+                Game.SendPacket(response);
+            }
+            else if (_chatHeader.StartsWith("/g")) // "/guild"
+            {
+                var response = new OutPacket(WorldCommand.CMSG_MESSAGECHAT);
+
+                response.Write((uint)ChatMessageType.Guild);
+                var race = Game.World.SelectedCharacter.Race;
+                var language = race.IsHorde() ? Language.Orcish : Language.Common;
+                response.Write((uint)language);
+                response.Write(message.ToCString());
+                Game.SendPacket(response);
+            }
+            else if (_chatHeader.StartsWith("/w")) // "/whisper <target>"
+            {
+                var response = new OutPacket(WorldCommand.CMSG_MESSAGECHAT);
+
+                if (s.StartsWith("/w")) // if it's the /w command being used, get the target, it must be in the string
+                {
+                    int idx = message.IndexOf(" ");
+                    if (idx != -1)
+                    {
+                        _chatTarget = message.Substring(0, idx);
+                        message = message.Substring(idx);
+                    }
+                }
+                // else, we're using last _chatHeader, and thus last _chatTarget
+
+                response.Write((uint)ChatMessageType.Whisper);
+                var race = Game.World.SelectedCharacter.Race;
+                var language = race.IsHorde() ? Language.Orcish : Language.Common;
+                response.Write((uint)language);
+                response.Write(_chatTarget.ToCString());
+                response.Write(message.ToCString());
+                Game.SendPacket(response);
+            }
+            else if (_chatHeader.StartsWith("/join")) // "/join <channel>"
+            {
+                var response = new OutPacket(WorldCommand.CMSG_JOIN_CHANNEL);
+
+                uint channelId = 0;
+                // byte is uint8
+                byte unk1 = 0;
+                byte unk2 = 0;
+                int idx = message.IndexOf(" ");
+                if (idx == -1)
+                    return;
+
+                string channel = message.Substring(0, idx);
+                string password = "";
+
+                response.Write((uint)channelId);
+                response.Write((byte)unk1);
+                response.Write((byte)unk2);
+                response.Write(channel.ToCString());
+                response.Write(password.ToCString());
+                Game.SendPacket(response);
+            }
+            else if (_chatHeader.StartsWith("/leave")) // "/leave <channel>"
+            {
+                uint unk = 0;
+                int idx = message.IndexOf(" ");
+                if (idx == -1)
+                    return;
+
+                string channel = message.Substring(0, idx);
+
+                var response = new OutPacket(WorldCommand.CMSG_LEAVE_CHANNEL);
+                response.Write((uint)unk);
+                response.Write(channel.ToCString());
+                Game.SendPacket(response);
+            }
         }
 
         public void Exit()
@@ -94,6 +212,7 @@ namespace Client.UI.CommandLine
 
         public void PresentCharacterList(Character[] characterList)
         {
+            Game.UI.LogLine(string.Format(">PresentCharacterList"), LogLevel.Debug);
             LogLine("\n\tName\tLevel Class Race");
 
             int index = 0;

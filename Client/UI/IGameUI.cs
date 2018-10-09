@@ -36,6 +36,7 @@ namespace Client.UI
         string ReadLine();
         int Read();
         ConsoleKeyInfo ReadKey();
+        void UpdateCommands();
 
         #endregion
     }
