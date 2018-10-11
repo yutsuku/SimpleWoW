@@ -36,7 +36,7 @@ namespace Client.World.Network
             WorldCommand.SMSG_INIT_WORLD_STATES,
             WorldCommand.SMSG_UPDATE_WORLD_STATE,
             WorldCommand.SMSG_WEATHER,
-            WorldCommand.SMSG_TIME_SYNC_REQ,
+            //WorldCommand.SMSG_TIME_SYNC_REQ,
             WorldCommand.SMSG_NOTIFICATION,
             WorldCommand.SMSG_SPLINE_MOVE_STOP_SWIM,
             WorldCommand.SMSG_SPLINE_MOVE_SET_WALK_MODE,
@@ -568,6 +568,13 @@ namespace Client.World.Network
                     connection.Close();
                 connection = new TcpClient(ServerInfo.Address, ServerInfo.Port);
 
+                /*KeepAliveTimer = new System.Threading.Timer(
+                    e => KeepAlive(),
+                    null,
+                    TimeSpan.Zero,
+                    TimeSpan.FromMinutes(5)
+                );*/
+
                 Game.UI.LogLine("done!");
             }
             catch (SocketException ex)
@@ -580,6 +587,18 @@ namespace Client.World.Network
         }
 
         #endregion
+
+        /*public void KeepAlive()
+        {
+            if (Game.World.SelectedCharacter != null)
+            {
+                OutPacket request = new OutPacket(WorldCommand.CMSG_KEEP_ALIVE);
+                Send(request);
+
+                Console.ResetColor();
+                Game.UI.LogLine("Keep alive.", LogLevel.Detail);
+            }
+        }*/
 
         public void Send(OutPacket packet)
         {

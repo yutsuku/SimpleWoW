@@ -80,6 +80,7 @@
     <Compile Include="World\Definitions\Vector3.cs" />
     <Compile Include="World\Entities\Position.cs" />
     <Compile Include="World\Entities\WorldObject.cs" />
+    <Compile Include="World\Network\PacketHandlers\MiscHandler.cs" />
     <Compile Include="World\Utility.cs" />
     <Compile Include="World\Definitions\Gender.cs" />
     <Compile Include="World\Definitions\PlayerClass.cs" />

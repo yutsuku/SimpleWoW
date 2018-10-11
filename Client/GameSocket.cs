@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Net.Sockets;
 using Client.World.Network;
+using System.Threading;
 
 namespace Client
 {
@@ -19,6 +20,8 @@ namespace Client
         }
 
         public IGame Game { get; protected set; }
+
+        public Timer KeepAliveTimer;
 
         protected TcpClient connection { get; set; }
 
