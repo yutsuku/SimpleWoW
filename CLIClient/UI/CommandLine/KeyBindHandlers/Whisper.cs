@@ -8,7 +8,7 @@ namespace Client.UI.CommandLine
 {
     public partial class CommandLineUI
     {
-        [KeyBind(ConsoleKey.W)]
+        //[KeyBind(ConsoleKey.W)]
         public void DoWhisper()
         {
             LogLine("Enter name of player to whisper, or enter 'Q' to go back.", LogLevel.Detail);
@@ -33,7 +33,7 @@ namespace Client.UI.CommandLine
             //! Print on WhisperInform message
         }
 
-        [KeyBind(ConsoleKey.R)]
+        //[KeyBind(ConsoleKey.R)]
         public void DoWhisperReply()
         {
             if (Game.World.LastWhisperers.Count == 0)

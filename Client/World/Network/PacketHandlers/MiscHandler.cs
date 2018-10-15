@@ -28,7 +28,6 @@ namespace Client.World.Network
             response.Write(clientTicks);
 
             Send(response);
-            //Game.UI.LogLine("No characters found!");
         }
     }
 }

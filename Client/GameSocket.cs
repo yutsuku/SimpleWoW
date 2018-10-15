@@ -21,8 +21,6 @@ namespace Client
 
         public IGame Game { get; protected set; }
 
-        public Timer KeepAliveTimer;
-
         protected TcpClient connection { get; set; }
 
         public AuthenticationCrypto authenticationCrypto = new AuthenticationCrypto();

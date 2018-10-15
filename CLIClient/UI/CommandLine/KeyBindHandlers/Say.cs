@@ -8,7 +8,7 @@ namespace Client.UI.CommandLine
 {
     public partial class CommandLineUI
     {
-        [KeyBind(ConsoleKey.S)]
+        //[KeyBind(ConsoleKey.S)]
         public void DoSayChat()
         {
             Log("Say: ");

@@ -77,9 +77,11 @@
     <Compile Include="World.cs" />
     <Compile Include="World\CharacterEnumeration.cs" />
     <Compile Include="World\Definitions\Enums.cs" />
+    <Compile Include="World\Definitions\Guild\Guild.cs" />
     <Compile Include="World\Definitions\Vector3.cs" />
     <Compile Include="World\Entities\Position.cs" />
     <Compile Include="World\Entities\WorldObject.cs" />
+    <Compile Include="World\Network\PacketHandlers\GuildHandler.cs" />
     <Compile Include="World\Network\PacketHandlers\MiscHandler.cs" />
     <Compile Include="World\Utility.cs" />
     <Compile Include="World\Definitions\Gender.cs" />

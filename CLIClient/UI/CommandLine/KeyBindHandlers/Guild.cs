@@ -8,7 +8,7 @@ namespace Client.UI.CommandLine
 {
     public partial class CommandLineUI
     {
-        [KeyBind(ConsoleKey.G)]
+        //[KeyBind(ConsoleKey.G)]
         public void DoGuildChat()
         {
             Log("Guild Message: ");
@@ -24,7 +24,7 @@ namespace Client.UI.CommandLine
             Game.SendPacket(response);
         }
 
-        [KeyBind(ConsoleKey.O)]
+        //[KeyBind(ConsoleKey.O)]
         public void DoOfficerChat()
         {
             Log("Officer Message: ");

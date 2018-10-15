@@ -19,7 +19,6 @@ namespace Client.UI.CommandLine
         private StreamWriter _logFile;
         private string _chatHeader; // keeps info on the last written chat (so that we don't have to write /say twice, it 'sticks')
         private string _chatTarget; // used for /whisper <target>, keeps the <target>
-        private DateTime _lastKeepAliveTime;
 
         #endregion
 
@@ -384,6 +383,11 @@ namespace Client.UI.CommandLine
                     Console.ResetColor();
                 }
             }
+        }
+
+        public void LogException(Exception exception)
+        {
+            LogException(exception.Message);
         }
 
         public void LogException(string message)

@@ -23,7 +23,7 @@ namespace Client.World.Network
             WorldCommand.SMSG_MOTD,
             WorldCommand.SMSG_GUILD_EVENT,
             WorldCommand.SMSG_GUILD_BANK_LIST,
-            WorldCommand.SMSG_GUILD_ROSTER,
+            //WorldCommand.SMSG_GUILD_ROSTER,
             WorldCommand.SMSG_LEARNED_DANCE_MOVES,
             WorldCommand.SMSG_SET_PCT_SPELL_MODIFIER,
             WorldCommand.SMSG_CONTACT_LIST,

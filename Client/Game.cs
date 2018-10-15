@@ -122,8 +122,6 @@ namespace Client
                 Thread.Sleep(100);
             }
 
-            socket.KeepAliveTimer.Dispose();
-
             thread.Join();
             UI.Exit();
         }
