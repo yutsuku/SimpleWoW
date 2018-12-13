@@ -33,7 +33,7 @@ namespace Client.World
             Race = (Race)packet.ReadByte();
             Class = (Class)packet.ReadByte();
             Gender = (Gender)packet.ReadByte();
-            Bytes = packet.ReadBytes(5);
+            Bytes = packet.ReadBytes(5); // skin, face, hairStyle, hairColor, facialStyle
             Level = packet.ReadByte();
             ZoneId = packet.ReadUInt32();
             MapId = packet.ReadUInt32();
@@ -49,29 +49,32 @@ namespace Client.World
             PetFamilyId = packet.ReadUInt32();
 
             // read items
-            for (int i = 0; i < Items.Length - 1; ++i)
+            for (int i = 0; i < Items.Length; ++i)
+            {
                 Items[i] = new Item(packet);
+            }
 
             // read bags
             for (int i = 0; i < 4; ++i)
             {
-                packet.ReadUInt32();
-                packet.ReadByte();
-                packet.ReadUInt32();
+                var displayid = packet.ReadUInt32();
+                var slot = packet.ReadByte();
+                var enchant = packet.ReadUInt32();
             }
         }
     }
 
     class Item
     {
-        uint DisplayId;
-        byte InventoryType;
+        public uint DisplayId;
+        public byte InventoryType;
+        public uint enchant;
 
         public Item(InPacket packet)
         {
             DisplayId = packet.ReadUInt32();
             InventoryType = packet.ReadByte();
-            packet.ReadUInt32();    // ???
+            enchant = packet.ReadUInt32();
         }
     }
 }
