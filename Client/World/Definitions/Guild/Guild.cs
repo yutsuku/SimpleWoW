@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Client.UI;
+using Client.World.Definitions;
 
 namespace Client.World
 {
@@ -36,12 +37,52 @@ namespace Client.World
     {
         public List<RankInfo> ranks = new List<RankInfo>();
         public RankInfo rankInfo = new RankInfo();
+        public List<GuildMember> GuildMembers = new List<GuildMember>();
+        public uint online = 0;
     }
+
+    public class GuildMember
+    {
+        public ulong m_guid;
+        public byte m_flags;
+        public bool isOnline;
+        public float lastOnline;
+        public string m_name;
+        public uint m_rankId;
+        public byte m_level;
+        public byte m_class;
+        public byte m_gender;
+        public uint m_zoneId;
+        public string m_publicNote;
+        public string m_officerNote;
+
+        public GuildMember(InPacket packet)
+        {
+            m_guid = packet.ReadUInt64();
+            m_flags = packet.ReadByte();
+            m_name = packet.ReadCString();
+            m_rankId = packet.ReadUInt32();
+            m_level = packet.ReadByte();
+            m_class = packet.ReadByte();
+            m_gender = packet.ReadByte();
+            m_zoneId = packet.ReadUInt32();
+
+            isOnline = ((GuildMemberFlags)m_flags & GuildMemberFlags.GUILDMEMBER_STATUS_ONLINE) != 0;
+
+            if (!isOnline)
+            {
+                lastOnline = packet.ReadSingle();
+            }
+
+            m_publicNote = packet.ReadCString();
+            m_officerNote = packet.ReadCString();
+        }
+}
 
     public class GuildBankRightsAndSlots
     {
         public byte tabId;
-        public byte rights;
+        public uint rights;
         public uint slots;
     }
 
@@ -54,20 +95,6 @@ namespace Client.World
         public uint m_bankMoneyPerDay;
         public GuildBankRightsAndSlots m_bankTabRightsAndSlots = new GuildBankRightsAndSlots();
 
-        //void Guild::RankInfo::WritePacket(WorldPacket& data) const
-        //{
-        //    data << uint32(m_rights);
-        //    if (m_bankMoneyPerDay == GUILD_WITHDRAW_MONEY_UNLIMITED)
-        //        data << uint32(GUILD_WITHDRAW_MONEY_UNLIMITED);
-        //    else
-        //        data << uint32(m_bankMoneyPerDay);
-        //    for (uint8 i = 0; i<GUILD_BANK_MAX_TABS; ++i)
-        //    {
-        //        data << uint32(m_bankTabRightsAndSlots[i].GetRights());
-        //        data << uint32(m_bankTabRightsAndSlots[i].GetSlots());
-        //    }
-        //}
-
         public void SetInfo(InPacket packet)
         {
             m_rights = packet.ReadUInt32();
@@ -76,7 +103,7 @@ namespace Client.World
             for (int i = 0; i < (int)GuildMisc.GUILD_BANK_MAX_TABS; ++i)
             {
                 m_bankTabRightsAndSlots.tabId = (byte)i;
-                m_bankTabRightsAndSlots.rights = packet.ReadByte();
+                m_bankTabRightsAndSlots.rights = packet.ReadUInt32();
                 m_bankTabRightsAndSlots.slots = packet.ReadUInt32();
             }
         }
